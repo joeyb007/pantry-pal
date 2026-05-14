@@ -21,4 +21,27 @@ class LLMResponse(BaseModel):
     title: str
     ingredients: List[str]
     directions: List[str]
+
+# New schemas for the /generate and /check_constraints endpoints
+from typing import Optional
+
+class GenerateRequest(BaseModel):
+    restrictions: List[str]
+    pantry_items: List[str]
+    cuisine: Optional[str] = None
+
+class ConstraintFlag(BaseModel):
+    flag: str
+    probability: float
+    present: bool
+
+class GenerateResponse(BaseModel):
+    recipe: str
+    constraint_check: List[ConstraintFlag]
+
+class CheckConstraintsRequest(BaseModel):
+    ingredients: List[str]
+
+class CheckConstraintsResponse(BaseModel):
+    flags: List[ConstraintFlag]
     
