@@ -1,7 +1,9 @@
 import os
+import time
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 
 from pipelines.XGB_inference_pipeline import classify_ingredients
 from schemas import (
@@ -33,7 +35,20 @@ async def lifespan(app: FastAPI):
     yield
 
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("pantrypal")
+
 app = FastAPI(title="PantryPal", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def latency_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.1f}"
+    logger.info("%.1f ms  %s %s", elapsed_ms, request.method, request.url.path)
+    return response
 
 
 def _generate(instruction: str) -> str:
