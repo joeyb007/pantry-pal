@@ -1,35 +1,47 @@
 import torch
 from datasets import load_dataset
-from unsloth import FastLanguageModel, PatchDPOTrainer
-from trl import DPOTrainer, DPOConfig
-
-# Patches trl's DPOTrainer to use unsloth's memory-efficient implementation
-PatchDPOTrainer()
+from peft import LoraConfig, TaskType, get_peft_model
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from trl import DPOConfig, DPOTrainer
 
 SFT_MODEL_PATH = "models/sft/pantrypal-llama-3.2-3b-sft"
 OUTPUT_DIR = "models/dpo/pantrypal-llama-3.2-3b-dpo"
 
 
-def train(dpo_data_path: str = "data/benchmark/dpo_pairs.jsonl", output_dir: str = OUTPUT_DIR) -> None:
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=SFT_MODEL_PATH,
-        max_seq_length=1024,
+def load_model_and_tokenizer(model_path: str):
+    bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
     )
-    model = FastLanguageModel.get_peft_model(
-        model,
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        quantization_config=bnb_config,
+        device_map="auto",
+    )
+    lora_config = LoraConfig(
         r=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
         lora_alpha=32,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
         lora_dropout=0,
         bias="none",
+        task_type=TaskType.CAUSAL_LM,
     )
+    model = get_peft_model(model, lora_config)
+    return model, tokenizer
 
+
+def train(dpo_data_path: str = "data/benchmark/dpo_pairs.jsonl", output_dir: str = OUTPUT_DIR) -> None:
+    model, tokenizer = load_model_and_tokenizer(SFT_MODEL_PATH)
     dataset = load_dataset("json", data_files=dpo_data_path, split="train")
 
     trainer = DPOTrainer(
         model=model,
-        ref_model=None,  # unsloth derives reference model from the SFT checkpoint internally
+        ref_model=None,  # when ref_model=None, trl uses the frozen base of the peft model as reference
         args=DPOConfig(
             output_dir=output_dir,
             per_device_train_batch_size=2,

@@ -1,7 +1,8 @@
 import torch
 from datasets import load_dataset
-from unsloth import FastLanguageModel
-from trl import SFTTrainer, SFTConfig
+from peft import LoraConfig, TaskType, get_peft_model
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from trl import SFTConfig, SFTTrainer
 
 MAX_SEQ_LEN = 1024
 BASE_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
@@ -9,21 +10,31 @@ OUTPUT_DIR = "models/sft/pantrypal-llama-3.2-3b-sft"
 
 
 def load_model_and_tokenizer(model_name: str = BASE_MODEL):
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=model_name,
-        max_seq_length=MAX_SEQ_LEN,
+    bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
+        bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_quant_type="nf4",
     )
-    model = FastLanguageModel.get_peft_model(
-        model,
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        quantization_config=bnb_config,
+        device_map="auto",
+    )
+    model.gradient_checkpointing_enable()
+    lora_config = LoraConfig(
         r=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
         lora_alpha=32,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
         lora_dropout=0,
         bias="none",
-        use_gradient_checkpointing="unsloth",
-        random_state=42,
+        task_type=TaskType.CAUSAL_LM,
     )
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()
     return model, tokenizer
 
 
