@@ -55,7 +55,7 @@ def train(dpo_data_path: str = "data/benchmark/dpo_pairs.jsonl", output_dir: str
             save_strategy="epoch",
         ),
         train_dataset=dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
     )
     trainer.train()
     model.save_pretrained(output_dir)

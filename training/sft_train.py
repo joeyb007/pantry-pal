@@ -58,7 +58,7 @@ def train(data_dir: str = "data/benchmark", output_dir: str = OUTPUT_DIR) -> Non
 
     trainer = SFTTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
         args=SFTConfig(
