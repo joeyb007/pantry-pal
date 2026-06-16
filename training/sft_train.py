@@ -25,6 +25,7 @@ def load_model_and_tokenizer(model_name: str = BASE_MODEL):
         device_map="auto",
     )
     model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()  # required for gradient checkpointing + PEFT
     lora_config = LoraConfig(
         r=16,
         lora_alpha=32,
