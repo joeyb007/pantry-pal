@@ -5,12 +5,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from pipelines.XGB_inference_pipeline import classify_ingredients
 
+BASE_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
+
 
 def load_model(model_path: str):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
     bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     model = AutoModelForCausalLM.from_pretrained(
         model_path, quantization_config=bnb_config, device_map="auto"
     )
@@ -34,11 +38,6 @@ def generate_completion(model, tokenizer, instruction: str, seed: int) -> str:
 
 
 def is_compliant(completion: str, restrictions: list[str]) -> bool:
-    """Return True if completion passes XGBoost check for all stated restrictions.
-
-    We pass the first 500 chars of the completion as a pseudo-ingredient string.
-    The TF-IDF vectorizer picks up relevant food words even in recipe prose.
-    """
     if not restrictions:
         return True
     result = classify_ingredients([completion[:500]])
@@ -49,10 +48,26 @@ def build_preference_pairs(
     train_jsonl: str,
     sft_model_path: str,
     output_path: str,
+    base_model_path: str = BASE_MODEL,
     max_pairs: int = 5000,
 ) -> None:
-    model, tokenizer = load_model(sft_model_path)
+    """Generate DPO preference pairs using SFT model as chosen and base Llama as rejected.
+
+    Sampling both completions from the same SFT model yields near-zero contrast because
+    the SFT model already learned to be compliant. Instead we use:
+      - chosen:   SFT model completion (verified compliant by XGBoost)
+      - rejected: base Llama completion (frequently violates constraints)
+
+    This gives near-100% contrast rate and clean preference signal for DPO.
+    """
+    print("Loading SFT model...")
+    sft_model, sft_tokenizer = load_model(sft_model_path)
+
+    print("Loading base model...")
+    base_model, base_tokenizer = load_model(base_model_path)
+
     pairs = []
+    skipped = 0
 
     with open(train_jsonl) as f:
         examples = [json.loads(line) for line in f]
@@ -60,24 +75,25 @@ def build_preference_pairs(
     for i, ex in enumerate(examples):
         if len(pairs) >= max_pairs:
             break
+
         instruction = ex["instruction"]
         restrictions = ex.get("chosen_restrictions", [])
 
-        c1 = generate_completion(model, tokenizer, instruction, seed=0)
-        c2 = generate_completion(model, tokenizer, instruction, seed=1)
-        c1_ok = is_compliant(c1, restrictions)
-        c2_ok = is_compliant(c2, restrictions)
+        chosen = generate_completion(sft_model, sft_tokenizer, instruction, seed=i)
+        rejected = generate_completion(base_model, base_tokenizer, instruction, seed=i)
 
-        # Only useful when exactly one passes — creates a clear signal
-        if c1_ok == c2_ok:
+        chosen_ok = is_compliant(chosen, restrictions)
+        rejected_ok = is_compliant(rejected, restrictions)
+
+        # Only use pairs where SFT passes and base fails — clean contrast signal
+        if not chosen_ok or rejected_ok:
+            skipped += 1
             continue
 
-        chosen = c1 if c1_ok else c2
-        rejected = c2 if c1_ok else c1
         pairs.append({"prompt": instruction, "chosen": chosen, "rejected": rejected})
 
-        if i % 100 == 0:
-            print(f"Processed {i}/{len(examples)}, pairs: {len(pairs)}")
+        if i % 50 == 0:
+            print(f"Processed {i}/{len(examples)}, pairs: {len(pairs)}, skipped: {skipped}")
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
