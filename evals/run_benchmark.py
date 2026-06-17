@@ -155,8 +155,11 @@ CSR improved {sign}{delta}pp: {sft_csr['csr']}% (SFT) → {dpo_csr['csr']}% (DPO
 
 | Restriction | CSR |
 |-------------|-----|
-{"".join(f"| {k} | {v}% |\n" for k, v in sorted(dpo_csr['per_restriction'].items()))}
 """
+    per_restriction_rows = "".join(
+        f"| {k} | {v}% |\n" for k, v in sorted(dpo_csr["per_restriction"].items())
+    )
+    report += per_restriction_rows
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         f.write(report)
