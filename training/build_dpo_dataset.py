@@ -29,7 +29,7 @@ def generate_completion(model, tokenizer, instruction: str, seed: int) -> str:
     with torch.no_grad():
         output = model.generate(
             input_ids,
-            max_new_tokens=512,
+            max_new_tokens=256,
             temperature=0.8,
             do_sample=True,
             pad_token_id=tokenizer.eos_token_id,
@@ -49,7 +49,7 @@ def build_preference_pairs(
     sft_model_path: str,
     output_path: str,
     base_model_path: str = BASE_MODEL,
-    max_pairs: int = 5000,
+    max_pairs: int = 1200,
 ) -> None:
     """Generate DPO preference pairs using SFT model as chosen and base Llama as rejected.
 
