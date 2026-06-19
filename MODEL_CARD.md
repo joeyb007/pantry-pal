@@ -25,7 +25,7 @@ SFT delta: **+44.77pp** over base Llama.
 |---|---|
 | **Base model** | meta-llama/Llama-3.2-3B-Instruct |
 | **Method** | QLoRA SFT (r=16, α=32, NF4 quantization) |
-| **Training data** | 8K instruction-response pairs, Food.com recipes labeled across 18 dietary categories |
+| **Training data** | 8K instruction-response pairs, RecipeNLG recipes labeled across 18 dietary categories |
 | **LoRA targets** | q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj |
 | **Training cost** | ~$8 on Vast.ai RTX 4090 |
 
@@ -65,7 +65,7 @@ print(tokenizer.decode(output[0][input_ids.shape[1]:], skip_special_tokens=True)
 
 - Keyword avoidance is a proxy. XGBoost classifiers use bag-of-words features and do not understand negation or context.
 - GPT-4o's lower score likely reflects distribution mismatch — its verbose style mentions ingredient names in non-violating contexts that trigger the classifier.
-- Trained on Food.com recipes; generalization to other cuisines or vocabularies is untested.
+- Trained on RecipeNLG recipes; generalization to other cuisines or vocabularies is untested.
 - DPO degradation is unresolved — PEFT adapter stacking is the leading hypothesis.
 
 ## Dietary Categories

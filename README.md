@@ -26,7 +26,7 @@ The broader question: **does automated preference labeling produce training sign
 ## Pipeline
 
 ```
-2.2M recipes (Food.com)
+2.2M recipes (RecipeNLG)
        ↓
 regex-bootstrapped labeling → 10K seed-labeled examples (18 dietary categories)
        ↓
@@ -100,7 +100,7 @@ OPENAI_API_KEY=... python evals/run_benchmark.py \
 
 ## Dataset
 
-- 2.2M Food.com recipes, 10K seed-labeled across 18 dietary categories
+- 2.2M RecipeNLG recipes, 10K seed-labeled across 18 dietary categories
 - Categories: alcohol, beef, chicken, dairy, eggs, fish, gluten, high\_carb, honey, legumes, nuts, peanuts, pork, processed\_meats, sesame, shellfish, soy, sugar
 
 ## Tests
